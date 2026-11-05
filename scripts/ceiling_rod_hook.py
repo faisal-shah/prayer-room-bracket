@@ -132,8 +132,8 @@ junction_edges = ShapeList(
 body = body.fillet(stem_fillet_r, junction_edges)
 
 # ---- secondary features: counterbored screw holes for pan heads, on the underside ----
-# Built as a cutter solid and subtracted, which keeps the step the same on
-# build123d 0.11 (MCP session) and 0.12 (uv run) without add()/insert().
+# Built as a cutter solid and subtracted so MCP and standalone environments
+# use the same version-independent boolean construction.
 # Pan heads seat flat on the counterbore floor, so nothing wedges the plate open.
 with BuildPart() as cutter_bp:
     with Locations(*[Location((x, y, -plate_t), (180, 0, 0)) for x, y in screws]):

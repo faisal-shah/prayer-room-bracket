@@ -1,3 +1,8 @@
+---
+name: b123d-repair
+description: "Repair invalid build123d or imported CAD geometry without changing intended form. Use when validation or export reports non-manifold, watertightness, or BRep defects."
+---
+
 # Repair Invalid Geometry with build123d (b123d-repair)
 
 Use this skill when `validate()` or the `export()` gate reports FAIL on a shape —

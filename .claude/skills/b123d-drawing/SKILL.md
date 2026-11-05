@@ -1,3 +1,8 @@
+---
+name: b123d-drawing
+description: "Create or repair engineering drawings from build123d geometry. Use for dimensioned drawing views, SVG/PDF exports, drawing layout, and drawing validation."
+---
+
 # Create Engineering Drawing from build123d Geometry
 
 Use this skill when asked to create or fix an engineering drawing for a

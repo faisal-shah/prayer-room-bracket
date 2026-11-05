@@ -1,3 +1,8 @@
+---
+name: b123d-modeling
+description: "Build, modify, verify, render, and export 3D parts or assemblies with build123d. Use for text specifications, technical drawings, existing CAD, and parametric modeling tasks."
+---
+
 # Build 3D Geometry with build123d
 
 Use this skill when asked to model, build, or modify a 3D part or assembly with

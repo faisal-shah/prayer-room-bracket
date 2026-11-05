@@ -1,3 +1,8 @@
+---
+name: b123d-edit
+description: "Edit existing build123d models while preserving parametric intent. Use for dimensional changes, feature additions or removals, fit corrections, and verified geometry deltas."
+---
+
 # Edit Existing build123d Geometry (b123d-edit)
 
 Use this skill when the task is to change an existing build123d model or script:
