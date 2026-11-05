@@ -14,6 +14,7 @@ Files:
 - `scripts/ceiling_rod_hook.py` — the design, as a parametric build123d script (single source of truth)
 - `output/ceiling_rod_hook.stl`, `.3mf` — print files, already in print orientation
 - `output/ceiling_rod_hook.step` — CAD model in design coordinates (ceiling at z = 0, hook hanging below)
+- `scripts/fea_hook.py`, `scripts/fea_plots.py` — finite-element check of the design (Gmsh, Elmer, CalculiX) and its plots; method and results in [docs/fea.md](docs/fea.md)
 
 ## Design basis
 
@@ -38,24 +39,31 @@ of the weight goes to the hook, the rest to the ends).
 
 | Feature | Value |
 | --- | --- |
-| Plate | 84 mm along the rod × 56 mm × 8 mm thick, corners R8, centred on the rod and the hook |
-| Hook | 24 mm wide, 8 mm walls, stem on the wall side, opens toward the room |
-| Cradle | Ø26.27 mm (0.3 mm radial clearance), lowest point 47.8 mm below the ceiling |
+| Plate | 84 mm along the rod × 82 mm × 8 mm thick, corners R8, centred on the rod and the hook |
+| Hook | 28 mm wide, stem on the wall side, opens toward the room |
+| Stem | 18 mm deep across the rod, R8 fillet into the plate; its outer face curves along an ellipse into the cradle |
+| Cradle | Ø26.27 mm (0.3 mm radial clearance), lowest point 47.8 mm below the ceiling, 8 mm wall under the rod and at the lip |
 | Lip | rises 9.7 mm above the cradle bottom on the room side |
 | Lowest point of the hook | 55.8 mm below the ceiling |
-| Screws | 2 × Everbilt #10-12 × 1-1/4 in pan-head screws with ribbed plastic anchors; Ø6.2 through, Ø12 × 2.5 mm counterbore for the head, 54 mm apart on the rod's centreline; 9 mm of plate from the counterbore to the nearest end and to the hook, 22 mm to the sides |
-| Mass | 63 g in PLA (solid) |
+| Screws | 2 × Everbilt #10-12 × 1-1/4 in pan-head screws with ribbed plastic anchors; Ø6.2 through, Ø12 × 2.5 mm counterbore for the head, 54 mm apart on the rod's centreline; 9 mm of plate from the counterbore to the nearest end, 5 mm to the stem's root fillet, 35 mm to the sides |
+| Mass | 105 g in PLA (solid) |
 
 Load path: the rod's weight enters the cradle, runs up the stem into the plate,
 and the plate spans between the two screws with the load between them, so
-the screws see only tension, no prying. With a 4 kg share of rod and curtain
-weight the stem carries about 3 MPa in bending and the plate about 1.3 MPa,
-far below PLA's strength and low enough that creep is not a concern.
+the screws see only tension, no prying. The stem stands beside the rod, so it
+carries the load in bending, and with the part printed plate-down that bending
+pulls the print layers apart: layer bonding sets the hook's strength. With a
+4 kg share of rod and curtain weight the peak stress across the layers is
+1.09 MPa at the root fillet and 1.03 MPa where the stem turns into the
+cradle, and the hook deflects 0.10 mm. [docs/fea.md](docs/fea.md) has the
+analysis and the design study behind the stem's size.
 
 ## Printing
 
-- Material: PLA is fine at this stress level. 4 perimeters, 40 % or more
-  infill (or solid; it is only 63 g).
+- Material: PLA, printed solid (100 % infill). The stem's bending stress runs
+  across the layers, and a thin shell over sparse infill carries it on a
+  fraction of the section. Print at the filament's usual nozzle temperature
+  or a little above, with moderate part cooling, so the layers bond well.
 - Orientation: the STL/3MF are already oriented with the flat ceiling face on
   the bed and the hook rising as a crook. The crook's underside and the lip
   need supports (organic/tree supports work well; they land on the plate's
@@ -69,7 +77,7 @@ far below PLA's strength and low enough that creep is not a concern.
 
 The screw centres sit **87.5 mm (3.44 in) from the window wall**, on the
 line of the marked support spot, 27 mm either side of it. The plate spans
-59.5 mm to 115.5 mm (2.34 in to 4.55 in) from the wall.
+46.5 mm to 128.5 mm (1.83 in to 5.06 in) from the wall.
 
 1. Take the rod down (lift the ends out of the end brackets; the curtains can
    stay on it).
@@ -115,8 +123,24 @@ the top of the script; the ones most likely to change:
 | `rod_d` | rod diameter the cradle is sized for |
 | `stem_on` | `"wall"` (default) or `"room"`: which side the stem drops on; the hook opens toward the other side |
 | `screw_x` | half the screw spacing along the rod |
-| `wall_t`, `hook_w`, `plate_t` | how much material the hook and plate carry |
+| `wall_t`, `stem_t`, `hook_w`, `plate_t`, `stem_fillet_r` | how much material the cradle, stem and plate carry; rerun the FEA after changing them |
 
 The same script runs inside the build123d MCP session with `execute_file()`,
 where `result` is the bracket in design coordinates and `print_part` the
 print-oriented copy.
+
+## Checking strength
+
+`scripts/fea_hook.py` meshes the design with Gmsh, solves it in Elmer
+(optionally also CalculiX) with the hook's share of the weight on the cradle,
+and reports the stress across the print layers down the hook.
+`scripts/fea_plots.py` draws the plots in `docs/img/fea`. Elmer must be on
+`PATH`. From the repo root:
+
+```sh
+uv run scripts/fea_hook.py --name current --h-hook 1.2
+```
+
+`--set NAME=VALUE` overrides a design parameter for the analysis without
+editing the script. [docs/fea.md](docs/fea.md) covers the model, its
+validation, the design study and the remaining commands.

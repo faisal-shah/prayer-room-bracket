@@ -17,8 +17,12 @@ to a lip, so the rod enters from the room side. The cradle is set
 `cradle_bias` higher than the straight line between the two end brackets so
 the rod is lifted onto the hook and bears on it.
 
-Print upright, ceiling face on the bed, with supports under the crook (the
-part is sized for PLA: 8 mm walls keep the stem near 3 MPa under load).
+Print upright, ceiling face on the bed, with supports under the crook. The
+layers are then z-planes and the stem's bending pulls them apart, so layer
+bonding sets the strength: the stem is 18 mm deep, its outer wall tapers along
+an ellipse into the 8 mm cradle wall, and an R8 fillet blends it into the
+plate, which keeps the peak stress across the layers near 1 MPa for 4 kg on
+the cradle (scripts/fea_hook.py, docs/fea.md). Print solid.
 
 Run standalone from the repo root (`uv run scripts/ceiling_rod_hook.py`) to
 write output/ceiling_rod_hook.{step,stl,3mf}; the build123d MCP session runs
@@ -39,22 +43,23 @@ wall_to_rod_far_side = 100.3  # window wall -> room-side face of the rod (3.95 i
 stem_on = "wall"              # "wall" or "room": which side of the rod the stem drops on; the hook opens toward the other side
 cradle_bias = 2.0             # cradle sits this much HIGHER than the straight rod line, so the rod pre-loads onto the hook
 cradle_clearance = 0.3        # radial clearance between rod and cradle
-wall_t = 8.0                  # hook wall thickness (stem and cradle)
-hook_w = 24.0                 # hook width along the rod
+wall_t = 8.0                  # cradle wall thickness under the rod and at the lip
+stem_t = 18.0                 # stem depth across the rod; the outer wall tapers from this to wall_t around the cradle
+hook_w = 28.0                 # hook width along the rod
 lip_angle = 15.0              # lip ends this many degrees below the rod centreline (0 = half cup)
 plate_t = 8.0                 # ceiling plate thickness
 plate_x = 84.0                # plate length along the rod (15 mm from each screw centre to the end)
-plate_y_stem_side = 28.0      # plate reach from the rod centreline toward the stem side (covers stem + fillet)
-plate_y_open_side = 28.0      # plate reach toward the open side; equal to the stem side centres the hook on the plate
+plate_y_stem_side = 41.0      # plate reach from the rod centreline toward the stem side (covers stem + fillet)
+plate_y_open_side = 41.0      # plate reach toward the open side; equal to the stem side centres the hook on the plate
 plate_corner_r = 8.0          # plate corner radius in plan view
 plate_edge_r = 1.5            # round on the plate's visible (underside) perimeter
-stem_fillet_r = 5.0           # fillet where the stem meets the plate
+stem_fillet_r = 8.0           # fillet where the stem meets the plate
 hook_round_r = 2.0            # round on every exposed hook edge (stem sides, cradle sides, lip tip)
 screw_hole_d = 6.2            # clearance for the #10-12 screws in Everbilt ribbed anchor packs (#12 major dia 5.5 mm)
 head_bore_d = 12.0            # counterbore for the pan head (#12 pan head is 10.8 mm across, #10 is 9.5 mm)
 head_bore_depth = 2.5         # pan head 2.8-3.3 mm tall sits 0.3-0.8 mm proud; 5.5 mm of plate stays under it
 screw_x = 27.0                # screws at (+/-screw_x, 0): above the rod centreline, either side of the hook,
-                              # 15 mm of material to the plate end and 28 mm to each side
+                              # 15 mm of material to the plate end and 41 mm to each side
 
 # ---- derived ----
 if stem_on not in ("room", "wall"):
@@ -62,7 +67,20 @@ if stem_on not in ("room", "wall"):
 stem_side = 1 if stem_on == "room" else -1  # +Y is the room side
 rod_r = rod_d / 2
 r_in = rod_r + cradle_clearance             # cradle inner radius
-r_out = r_in + wall_t                       # cradle outer radius
+r_out = r_in + wall_t                       # cradle outer radius on the open side
+stem_out = r_in + stem_t                    # stem outer face, distance from the rod centreline
+if stem_t < wall_t:
+    raise ValueError(f"stem_t ({stem_t}) must be at least wall_t ({wall_t})")
+if plate_y_stem_side < stem_out + stem_fillet_r + plate_edge_r:
+    raise ValueError("plate_y_stem_side does not cover the stem and its fillet")
+# Outer cradle wall: the convex hull of an ellipse and the r_out circle. The
+# ellipse has its vertex on the stem's outer face and the circle's half-depth,
+# so the wall is stem_t where the stem turns into the cradle and tapers to the
+# bottom; from the bottom to the lip the r_out circle keeps the open side at
+# wall_t. A flat joins their lowest points, tangent to both.
+ell_a = (stem_out + r_out) / 2              # semi-axis along Y
+ell_b = r_out                               # semi-axis along Z
+ell_cy = stem_side * (stem_out - r_out) / 2 # centre offset toward the stem
 cradle_z = -(rod_seat_at_brackets - cradle_bias)   # lowest point of the cradle surface (rod underside when seated)
 arc_cz = cradle_z + r_in                    # cradle arc centre height
 rod_cz = cradle_z + rod_r                   # rod centre height when seated
@@ -82,9 +100,9 @@ def _on_plane_z(e, z):
 
 
 def _tangent_seam(e):
-    """The two edges along X where the straight stem faces meet the cradle arcs."""
+    """Edges along X between tangent faces: stem faces to cradle walls, and the flat bottom to the outer walls."""
     bb = e.bounding_box()
-    return _on_plane_z(e, arc_cz) and bb.size.X > hook_w - eps
+    return bb.size.X > hook_w - eps and (_on_plane_z(e, arc_cz) or _on_plane_z(e, arc_cz - r_out))
 
 
 # ---- base 1: ceiling plate, top face on the ceiling at z = 0, underside perimeter rounded ----
@@ -97,20 +115,30 @@ plate = plate_bp.part
 plate = plate.fillet(plate_edge_r, ShapeList([e for e in plate.edges() if _on_plane_z(e, -plate_t)]))
 
 # ---- base 2: J hook, profile in the YZ plane (u = Y, v = Z) extruded along the rod ----
+# Built from sketch primitives (stable across build123d versions): the outer
+# wall's hull minus the cradle, clipped to the wedge from the stem side under
+# the rod to the lip (which makes the lip tip radial), plus the straight stem.
 arc_c = (0.0, arc_cz)
-lip_outer = (r_out * cos(radians(lip_end)), arc_cz + r_out * sin(radians(lip_end)))
-lip_inner = (r_in * cos(radians(lip_end)), arc_cz + r_in * sin(radians(lip_end)))
+fan_r = 4 * stem_out                        # wedge radius, well past the outer wall
+fan = [arc_c] + [
+    (fan_r * cos(radians(arc_start + arc_size * i / 32)), arc_cz + fan_r * sin(radians(arc_start + arc_size * i / 32)))
+    for i in range(33)
+]
 with BuildPart() as hook_bp:
-    with BuildSketch(Plane.YZ):
-        with BuildLine():
-            Line((stem_side * r_out, stem_top_z), (stem_side * r_out, arc_cz))   # stem, outer face
-            CenterArc(arc_c, r_out, start_angle=arc_start, arc_size=arc_size)     # cradle, outer arc
-            Line(lip_outer, lip_inner)                                            # lip tip (radial)
-            CenterArc(arc_c, r_in, start_angle=arc_start, arc_size=arc_size)      # cradle, inner arc
-            Line((stem_side * r_in, arc_cz), (stem_side * r_in, stem_top_z))     # stem, rod-side face
-            Line((stem_side * r_in, stem_top_z), (stem_side * r_out, stem_top_z))  # buried top
-        make_face()
-    extrude(amount=hook_w / 2, both=True)
+    with BuildSketch(Plane.YZ.offset(-hook_w / 2)):
+        with Locations((ell_cy, arc_cz)):
+            Ellipse(ell_a, ell_b)                                    # outer wall, stem side
+        if stem_t > wall_t:                                          # (at stem_t == wall_t the ellipse is the circle)
+            with Locations(arc_c):
+                Circle(r_out)                                        # outer wall, open side
+            with Locations((ell_cy / 2, arc_cz - r_out / 2)):
+                Rectangle(abs(ell_cy), r_out)                        # flat bottom between their lowest points
+        with Locations(arc_c):
+            Circle(r_in, mode=Mode.SUBTRACT)                         # cradle
+        Polygon(*fan, align=None, mode=Mode.INTERSECT)               # stem side, under the rod, lip
+        with Locations((stem_side * (r_in + stem_out) / 2, (arc_cz + stem_top_z) / 2)):
+            Rectangle(stem_t, stem_top_z - arc_cz)                   # stem, top buried in the plate
+    extrude(amount=hook_w)                                           # one extrusion: a fused pair would split the elliptic face
 hook = hook_bp.part
 
 # round every exposed hook edge; skip the buried top and the tangent seams (no edge to round there)
@@ -126,7 +154,7 @@ junction_edges = ShapeList(
         if _on_plane_z(e, -plate_t)
         and abs(e.bounding_box().center().X) < hook_w / 2 + eps
         and stem_side * e.bounding_box().center().Y > r_in - eps
-        and stem_side * e.bounding_box().center().Y < r_out + eps
+        and stem_side * e.bounding_box().center().Y < stem_out + eps
     ]
 )
 body = body.fillet(stem_fillet_r, junction_edges)
